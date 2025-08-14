@@ -1,0 +1,65 @@
+<odoo>
+
+    <record id="view_loan_dashboard_graph_status" model="ir.ui.view">
+        <field name="name">loan.dashboard.graph.status</field>
+        <field name="model">loan.manager.loan</field>
+        <field name="arch" type="xml">
+            <graph string="Préstamos por Estado" type="bar" stacked="True">
+                <field name="loan_status" type="row"/>
+                <field name="loan_amount" type="measure"/>
+            </graph>
+        </field>
+    </record>
+
+    <record id="view_loan_dashboard_graph_month" model="ir.ui.view">
+        <field name="name">loan.dashboard.graph.month</field>
+        <field name="model">loan.manager.loan</field>
+        <field name="arch" type="xml">
+            <graph string="Préstamos por Mes" type="line">
+                <field name="create_date_only" interval="month" type="row"/>
+                <field name="loan_amount" type="measure"/>
+            </graph>
+        </field>
+    </record>
+
+    <record id="view_loan_dashboard_graph_partner" model="ir.ui.view">
+        <field name="name">loan.dashboard.graph.partner</field>
+        <field name="model">loan.manager.loan</field>
+        <field name="arch" type="xml">
+            <graph string="Top Clientes por Monto" type="pie">
+                <field name="partner_id" type="row"/>
+                <field name="loan_amount" type="measure"/>
+            </graph>
+        </field>
+    </record>
+
+    <record id="view_loan_dashboard_pivot" model="ir.ui.view">
+        <field name="name">loan.dashboard.pivot</field>
+        <field name="model">loan.manager.loan</field>
+        <field name="arch" type="xml">
+            <pivot string="Resumen de Préstamos">
+                <field name="partner_id" type="row"/>
+                <field name="loan_status" type="col"/>
+                <field name="loan_amount" type="measure"/>
+            </pivot>
+        </field>
+    </record>
+
+    <record id="loan_dashboard_action" model="ir.actions.act_window">
+        <field name="name">Dashboard</field>
+        <field name="res_model">loan.manager.loan</field>
+        <field name="view_mode">graph,pivot</field>
+        <field name="views" eval="[
+            [ref('view_loan_dashboard_graph_status'), 'graph'],
+            [ref('view_loan_dashboard_graph_month'), 'graph'],
+            [ref('view_loan_dashboard_graph_partner'), 'graph'],
+            [ref('view_loan_dashboard_pivot'), 'pivot'],
+        ]"/>
+        <field name="context">{}</field>
+        <field name="domain">[]</field>
+        <field name="help" type="html">
+            <p>Este dashboard muestra un resumen de préstamos. Si no hay datos, verás gráficos de marcador de posición.</p>
+        </field>
+    </record>
+
+</odoo>
