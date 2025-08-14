@@ -1,0 +1,42 @@
+<odoo>
+    <record id="requirement_list_view" model="ir.ui.view">
+        <field name="name">requirement.list</field>
+        <field name="model">loan.manager.requirement</field>
+        <field name="arch" type="xml">
+            <list string="Requisitos">
+                <field name="loan_requirement"/>
+                <field name="description"/>
+                <field name="mandatory"/>
+            </list>
+        </field>
+    </record>
+
+    <record id="requirement_form_view" model="ir.ui.view">
+        <field name="name">requirement.form</field>
+        <field name="model">loan.manager.requirement</field>
+        <field name="arch" type="xml">
+            <form string="Requisito de Préstamo">
+                <sheet>
+                    <div class="oe_title">
+                        <label for="loan_requirement" class="oe_edit_only"/>
+                        <h1>
+                            <field name="loan_requirement" required="1"/>
+                        </h1>
+                    </div>
+                    <group string="Informacion General">
+                        <field name="description"/>
+                        <field name="mandatory"/>
+                    </group>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="requirements_action" model="ir.actions.act_window">
+        <field name="name">Requisitos</field>
+        <field name="res_model">loan.manager.requirement</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('company_id', '=', 1)]</field>
+    </record>
+</odoo>
