@@ -1,0 +1,7 @@
+"id","name","model_id:id","group_id:id","perm_read","perm_write","perm_create","perm_unlink"
+type_access,type.access,model_loan_manager_type,base.group_user,1,1,1,1
+requirement_access,requirement.access,model_loan_manager_requirement,base.group_user,1,1,1,1
+loan_access,loan.access,model_loan_manager_loan,base.group_user,1,1,1,1
+documentation_access,documentation.access,model_loan_manager_documentation,base.group_user,1,1,1,1
+repayment_access,repayment.access,model_loan_manager_repayment,base.group_user,1,1,1,1
+loan_reject_access,loan.reject.access,model_loan_manager_reject_wizard,base.group_user,1,1,1,1
