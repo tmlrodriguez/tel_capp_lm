@@ -19,6 +19,7 @@
         'views/loan_loans_view.xml',
         'views/loan_search_view.xml',
         'views/loan_dashboard_view.xml',
+        'views/account_move_view.xml',
         'views/loan_manager_menu.xml',
     ],
     'assets': {

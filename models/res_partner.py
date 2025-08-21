@@ -2,6 +2,9 @@ import math
 from odoo import api, models, fields
 
 class ResPartner(models.Model):
+    """
+        DOCSTRING: ResPartner model inherits from res.partner and adds a new field called loan_account to the partner.
+    """
     _inherit = 'res.partner'
 
     loan_account = fields.Many2one(

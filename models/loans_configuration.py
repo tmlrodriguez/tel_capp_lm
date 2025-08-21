@@ -1,4 +1,5 @@
 from odoo import models, fields, api
+from odoo.exceptions import ValidationError
 
 # Define your models here.
 
@@ -60,7 +61,7 @@ class LoanType(models.Model):
     payment_account = fields.Many2one('account.account', string='Cuenta de Cuotas', required=False, tracking=True)
     tenure_plan = fields.Selection([
         ('monthly', 'Mensual'),
-        ('biweekly', 'Bi-Semanal'),
+        ('biweekly', 'Quincenal'),
         ('weekly', 'Semanal'),
     ], string='Plan de Pago', required=True, tracking=True)
     amortization_method = fields.Selection([
@@ -68,16 +69,16 @@ class LoanType(models.Model):
         ('german', 'Cuota Sobre Saldos Insolutos')
     ], string='Método de Amortización')
     disburse_account = fields.Many2one('account.account', string='Cuenta de Desembolso', required=True, tracking=True, domain="[('code', '=ilike', '2%')]")
-    disburse_bank_account = fields.Many2one('account.account', string='Cuenta Bancaria de Desembolso', domain=[('account_type', '=', 'asset_cash')], required=True, tracking=True)
-    disburse_commission = fields.Float(string='Comision por Desembolso', required=True, tracking=True)
+    disburse_bank_account = fields.Many2one('account.account', string='Cuenta Bancaria de Desembolso Y Pago de Cuotas', domain=[('account_type', '=', 'asset_cash')], required=True, tracking=True)
+    disburse_commission = fields.Float(string='Comision por Desembolso (%)', required=True, tracking=True)
     disburse_commission_account = fields.Many2one('account.account', string='Cuenta de Comisión por Desembolso', required=True, tracking=True, domain="[('code', '=ilike', '4%')]")
-    anticipated_payment_commission = fields.Float(string='Comision por Pago Anticipado', required=True, tracking=True)
+    anticipated_payment_commission = fields.Float(string='Comision por Pago Anticipado (%)', required=True, tracking=True)
     anticipated_payment_commission_account = fields.Many2one('account.account', string='Cuenta de Comisión por Pago Anticipado', required=True, tracking=True, domain="[('code', '=ilike', '4%')]")
     legal_expenses = fields.Float(string='Gastos Legales', required=True, tracking=True)
     legal_expenses_account = fields.Many2one('account.account', string='Cuenta de Gastos Legales', required=True, tracking=True, domain="['|', ('code', '=ilike', '2%'), ('code', '=ilike', '4%')]")
     life_insurance = fields.Float(string='Seguro de Vida', required=True, tracking=True)
     life_insurance_account = fields.Many2one('account.account', string='Cuenta de Seguro de Vida', required=True, tracking=True, domain="['|', ('code', '=ilike', '2%'), ('code', '=ilike', '4%')]")
-    interest_rate = fields.Float(string='Interes', required=True, tracking=True)
+    interest_rate = fields.Float(string='Interes (%)', required=True, tracking=True)
     interest_account = fields.Many2one('account.account', string='Cuenta de Interés', required=True, tracking=True, domain="[('code', '=ilike', '4%')]")
     documents = fields.Many2many(
         comodel_name='loan.manager.requirement',
@@ -98,10 +99,10 @@ class LoanType(models.Model):
 
     interest_rate_display = fields.Char(string='Tasa de Interes (%)', compute='_compute_interest_rate_display', store=False)
 
-
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
+            self._validate_percentage_rates(vals)
             if vals.get('loan_name'):
                 vals['loan_name'] = vals['loan_name'].title()
             if vals.get('description'):
@@ -111,6 +112,7 @@ class LoanType(models.Model):
         return super().create(vals_list)
 
     def write(self, vals):
+        self._validate_percentage_rates(vals)
         if vals.get('loan_name'):
             vals['loan_name'] = vals['loan_name'].title()
         if vals.get('description'):
@@ -119,6 +121,24 @@ class LoanType(models.Model):
             vals['criteria'] = vals['criteria'].capitalize()
         return super().write(vals)
 
+    # Validations
+    def _validate_percentage_rates(self, vals):
+        to_check = {
+            'interest_rate': 'Interés',
+            'disburse_commission': 'Comisión por desembolso',
+            'anticipated_payment_commission': 'Comisión por pago anticipado'
+        }
+
+        for field, label in to_check.items():
+            if field in vals:
+                value = vals[field]
+                if value is None:
+                    continue
+                if value < 0 or value > 100:
+                    raise ValidationError(
+                        f'El porcentaje de {label} debe estar entre 0% y 100%. Valor recibido: {value}'
+                    )
+    # UI Changes
     @api.depends('interest_rate')
     def _compute_interest_rate_display(self):
         for record in self:
