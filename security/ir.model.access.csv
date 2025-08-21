@@ -5,3 +5,4 @@ loan_access,loan.access,model_loan_manager_loan,base.group_user,1,1,1,1
 documentation_access,documentation.access,model_loan_manager_documentation,base.group_user,1,1,1,1
 repayment_access,repayment.access,model_loan_manager_repayment,base.group_user,1,1,1,1
 loan_reject_access,loan.reject.access,model_loan_manager_reject_wizard,base.group_user,1,1,1,1
+loan_repayment_confirm_access,loan.repayment.confirm.access,model_loan_manager_repayment_confirm_wizard,base.group_user,1,1,1,1

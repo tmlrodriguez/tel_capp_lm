@@ -19,8 +19,17 @@ class Loan(models.Model):
     partner_id = fields.Many2one('res.partner', string='Cliente', required=True, tracking=True)
     loan_type_id = fields.Many2one('loan.manager.type', string='Tipo de Prestamo', required=True, tracking=True)
     loan_amount = fields.Float(string='Monto', required=True, tracking=True)
+    tenure_plan = fields.Selection([
+        ('monthly', 'Mensual'),
+        ('biweekly', 'Quincenal'),
+        ('weekly', 'Semanal'),
+    ], string='Plan de Pago', required=True, tracking=True)
     tenure = fields.Integer(string='Plazo', required=True, tracking=True)
-    interest_rate = fields.Float(string='Tasa de Interes', tracking=True)
+    amortization_method = fields.Selection([
+        ('french', 'Cuota Nivelada'),
+        ('german', 'Cuota Sobre Saldos Insolutos')
+    ], string='Método de Amortización')
+    interest_rate = fields.Float(string='Tasa de Interes (%)', tracking=True)
     disburse_amount = fields.Float(string='Monto a Desembolsar', readonly=True)
     amount_paid = fields.Float(string="Monto Pagado", compute="_compute_paid_pending", store=False, readonly=True)
     amount_pending = fields.Float(string="Monto Pendiente", compute="_compute_paid_pending", store=False, readonly=True)
@@ -47,19 +56,22 @@ class Loan(models.Model):
     )
     rejection_reason = fields.Text(string="Motivo de Rechazo", readonly=True, tracking=True)
     # Expenses Data
-    disburse_commission = fields.Float(string='Comisión por Desembolso')
-    anticipated_payment_commission = fields.Float(string='Comisión por Pago Anticipado')
+    disburse_commission = fields.Float(string='Comisión por Desembolso (%)')
+    disburse_commission_amount = fields.Float(string='Comisión por Desembolso (Monto)', compute='_compute_disburse_commission_amount', store=False, readonly=True, help='Monto calculado como (Monto del préstamo) × (Comisión de desembolso %) / 100.')
+    anticipated_payment_commission = fields.Float(string='Comisión por Pago Anticipado (%)')
     legal_expenses = fields.Float(string='Gastos Legales')
     life_insurance = fields.Float(string='Seguro de Vida')
     # Accounts Data
     interest_account_number = fields.Char(string='Cuenta de Interés')
     life_insurance_account_number = fields.Char(string='Cuenta de Seguro de Vida')
     disburse_account_number = fields.Char(string='Cuenta de Desembolso')
-    disburse_bank_account_number = fields.Char(string='Cuenta Bancaria de Desembolso',readonly=True)
+    disburse_bank_account_number = fields.Char(string='Cuenta Bancaria de Desembolso')
     payment_account_number = fields.Char(string='Cuenta de Cuotas')
     legal_expenses_account_number = fields.Char(string='Cuenta de Gastos Legales')
     anticipated_payment_commission_account_number = fields.Char(string='Cuenta de Comisión por Pago Anticipado')
     disburse_commission_account_number = fields.Char(string='Cuenta de Comisión por Desembolso')
+    register_move_id = fields.Many2one('account.move', string='Asiento de Registro', readonly=True, copy=False)
+    disburse_move_id = fields.Many2one('account.move', string='Asiento de Desembolso', readonly=True, copy=False)
     # Related Data
     company_id = fields.Many2one('res.company', readonly=True, copy=False, default=lambda self: self.env.user.company_id)
     loan_repayment_ids = fields.One2many('loan.manager.repayment', 'loan_id', string='Cuotas Generadas')
@@ -88,7 +100,8 @@ class Loan(models.Model):
                         'anticipated_payment_commission_account_number': loan_type.anticipated_payment_commission_account.code or '',
                         'disburse_commission_account_number': loan_type.disburse_commission_account.code or '',
                         'disburse_bank_account_number': (loan_type.disburse_bank_account.code or '') if loan_type.disburse_bank_account else '',
-
+                        'amortization_method': (loan_type.amortization_method or '') if loan_type.amortization_method else '',
+                        'tenure_plan': (loan_type.tenure_plan or '') if loan_type.tenure_plan else '',
                     })
             self._validate_loan_constraints(vals)
         return super().create(vals_list)
@@ -115,6 +128,8 @@ class Loan(models.Model):
                     'anticipated_payment_commission_account_number': loan_type.anticipated_payment_commission_account.code or '',
                     'disburse_commission_account_number': loan_type.disburse_commission_account.code or '',
                     'disburse_bank_account_number': (loan_type.disburse_bank_account.code or '') if loan_type.disburse_bank_account else '',
+                    'amortization_method': (loan_type.amortization_method or '') if loan_type.amortization_method else '',
+                    'tenure_plan': (loan_type.tenure_plan or '') if loan_type.tenure_plan else '',
                 })
             record._validate_loan_constraints(updated_vals)
             super().write(vals)
@@ -153,11 +168,45 @@ class Loan(models.Model):
             loan.amount_paid = math.floor(paid)
             loan.amount_pending = math.floor(pending)
 
+    @api.depends('loan_type_id.amortization_method')
+    def _compute_method_display(self):
+        map_labels = {
+            'french': 'Cuota Nivelada',
+            'german': 'Cuota Sobre Saldos Insolutos',
+        }
+        for rec in self:
+            method = rec.amortization_method or ''
+            rec.method_display = map_labels.get(method, '')
+
+    @api.depends('loan_type_id.tenure_plan')
+    def _compute_tenure_plan_display(self):
+        map_units = {
+            'weekly': 'Semanal',
+            'biweekly': 'Quincenal',
+            'monthly': 'Mensual',
+        }
+        for rec in self:
+            plan = rec.tenure_plan or ''
+            rec.tenure_plan_display = map_units.get(plan, '')
+
+    @api.depends('loan_amount', 'disburse_commission')
+    def _compute_disburse_commission_amount(self):
+        for rec in self:
+            pct = (rec.disburse_commission or 0.0) / 100.0
+            base = rec.loan_amount or 0.0
+            rec.disburse_commission_amount = round(base * pct, 2)
+
     # UI Changes
     @api.onchange('loan_type_id')
     def _on_change_type_id(self):
         if self.loan_type_id:
             self.interest_rate = self.loan_type_id.interest_rate
+            self.disburse_commission = self.loan_type_id.disburse_commission
+            self.anticipated_payment_commission = self.loan_type_id.anticipated_payment_commission
+            self.legal_expenses = self.loan_type_id.legal_expenses
+            self.life_insurance = self.loan_type_id.life_insurance
+            self.amortization_method = self.loan_type_id.amortization_method
+            self.tenure_plan = self.loan_type_id.tenure_plan
 
     # Validations
     def _validate_loan_constraints(self, vals):
@@ -184,7 +233,8 @@ class Loan(models.Model):
     # Internal Methods
     def _compute_disburse_amount(self):
         for record in self:
-            total_deductions = (record.disburse_commission + record.legal_expenses + record.life_insurance)
+            disbursed_commission_amount = record.loan_amount * (record.disburse_commission or 0.0) / 100.0
+            total_deductions = disbursed_commission_amount + record.legal_expenses + record.life_insurance
             record.disburse_amount = record.loan_amount - total_deductions
 
     def _register_loan(self):
@@ -196,11 +246,13 @@ class Loan(models.Model):
             if not loan.partner_id.loan_account:
                 raise ValidationError("El cliente debe tener definida una Cuenta de Préstamo (loan_account).")
 
+            disburse_commission_amount = (loan.loan_amount or 0.0) * (loan.disburse_commission or 0.0) / 100.0
+
             required = {
-                'disburse_commission_account_number': loan.disburse_commission,
-                'legal_expenses_account_number': loan.legal_expenses,
-                'life_insurance_account_number': loan.life_insurance,
-                'disburse_account_number': loan.disburse_amount,
+                'disburse_commission_account_number': disburse_commission_amount,
+                'legal_expenses_account_number': loan.legal_expenses or 0.0,
+                'life_insurance_account_number': loan.life_insurance or 0.0,
+                'disburse_account_number': loan.disburse_amount or 0.0,
             }
 
             lines = []
@@ -212,11 +264,11 @@ class Loan(models.Model):
                 'credit': 0.0,
             }))
 
-            for field_name, amount in required.items():
+            for acct_field, amount in required.items():
                 if amount and amount > 0:
-                    code = getattr(loan, field_name)
+                    code = getattr(loan, acct_field)
                     if not code:
-                        raise ValidationError(f"Falta la cuenta para {field_name}.")
+                        raise ValidationError(f"Falta la cuenta para {acct_field}.")
                     account = Account.search([('code', '=', code)], limit=1)
                     if not account:
                         raise ValidationError(f"No se encontró la cuenta con código {code}.")
@@ -234,10 +286,12 @@ class Loan(models.Model):
             move = Move.create({
                 'ref': f'Préstamo {loan.loan_reference}',
                 'date': loan.create_date_only or fields.Date.today(),
+                'loan_manager_id': loan.id,
                 'journal_id': journal.id,
                 'line_ids': lines,
             })
             move.action_post()
+            loan.write({'register_move_id': move.id})
 
     def _disburse_loan(self):
         Account = self.env['account.account']
@@ -284,9 +338,11 @@ class Loan(models.Model):
                 'ref': f'Desembolso {loan.loan_reference}',
                 'date': loan.create_date_only or fields.Date.today(),
                 'journal_id': journal.id,
+                'loan_manager_id': loan.id,
                 'line_ids': lines,
             })
             move.action_post()
+            loan.write({'disburse_move_id': move.id})
 
     # Button Actions
     def action_calculate_repayments(self):
@@ -447,7 +503,6 @@ class LoanRepayment(models.Model):
     """
         DOCSTRING:LoanRepayment model responsible for holding loan payments related information.
     """
-
     _name = 'loan.manager.repayment'
     _description = 'Loan Repayment'
     loan_id = fields.Many2one('loan.manager.loan', string='Prestamo', required=True, ondelete='cascade')
@@ -462,6 +517,14 @@ class LoanRepayment(models.Model):
         ('pending', 'Pendiente'),
         ('paid', 'Pagado'),
     ], default='pending', readonly=True, copy=False)
+    move_id = fields.Many2one('account.move', string='Asiento', readonly=True, copy=False, ondelete='set null', help='Asiento contable creado al registrar el pago de esta cuota.')
+
+    def write(self, vals):
+        allowed = {'status', 'move_id'}
+        illegal = set(vals.keys()) - allowed
+        if illegal:
+            raise ValidationError("Las cuotas no se pueden editar manualmente.")
+        return super().write(vals)
 
     @api.depends('principal', 'interest')
     def _compute_total_payment(self):
@@ -495,7 +558,7 @@ class LoanRepayment(models.Model):
         lines = [
             (0, 0, {
                 'name': f'Pago cuota {rec.sequence} {loan.loan_reference}',
-                'account_id': loan_type.payment_account.id,
+                'account_id': loan_type.disburse_bank_account.id,
                 'debit': rec.total_payment,
                 'credit': 0.0,
             }),
@@ -534,8 +597,42 @@ class LoanRepayment(models.Model):
                 raise ValidationError(
                     f"No puede marcar como pagada la cuota #{record.sequence} porque la cuota #{previous_unpaid[0].sequence} aún está pendiente."
                 )
-            record._create_payment_move()
-            record.write({'status': 'paid'})
+            move = record._create_payment_move()
+            record.write({'status': 'paid', 'move_id': move.id})
+
+
+class LoanRepaymentConfirmWizard(models.TransientModel):
+    """
+        DOCSTRING: LoanRepaymentConfirmWizard Transient Model responsible for confirming payments.
+    """
+    _name = 'loan.manager.repayment.confirm.wizard'
+    _description = 'Confirmar pago de cuota'
+
+    repayment_id = fields.Many2one('loan.manager.repayment', required=True, readonly=True)
+    principal = fields.Float(string='Capital', readonly=True)
+    interest = fields.Float(string='Interés', readonly=True)
+    total_to_pay = fields.Float(string='Total a Pagar', readonly=True)
+
+    @api.model
+    def default_get(self, fields_list):
+        res = super().default_get(fields_list)
+        repayment = self.env['loan.manager.repayment'].browse(self.env.context.get('active_id'))
+        if repayment:
+            res.update({
+                'repayment_id': repayment.id,
+                'principal': repayment.principal,
+                'interest': repayment.interest,
+                'total_to_pay': repayment.total_payment,
+            })
+        return res
+
+    def action_confirm(self):
+        self.ensure_one()
+        r = self.repayment_id.sudo()
+        if r.loan_status != 'disbursed' or r.status != 'pending':
+            raise ValidationError("Solo puede pagar cuotas pendientes de préstamos desembolsados.")
+        r.action_mark_as_paid()
+        return {'type': 'ir.actions.act_window_close'}
 
 
 class LoanRejectWizard(models.TransientModel):
@@ -558,10 +655,5 @@ class LoanRejectWizard(models.TransientModel):
             'rejection_reason': self.reason,
         })
         return {'type': 'ir.actions.act_window_close'}
-
-
-
-
-
 
 
