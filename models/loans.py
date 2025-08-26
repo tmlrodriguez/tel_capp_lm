@@ -73,7 +73,7 @@ class Loan(models.Model):
     register_move_id = fields.Many2one('account.move', string='Asiento de Registro', readonly=True, copy=False)
     disburse_move_id = fields.Many2one('account.move', string='Asiento de Desembolso', readonly=True, copy=False)
     # Related Data
-    company_id = fields.Many2one('res.company', readonly=True, copy=False, default=lambda self: self.env.user.company_id)
+    company_id = fields.Many2one('res.company', readonly=True, copy=False, default=lambda self: self.env.company)
     loan_repayment_ids = fields.One2many('loan.manager.repayment', 'loan_id', string='Cuotas Generadas')
     create_date_only = fields.Date(string="Fecha de Creación", compute="_compute_create_date_only", store=True)
     interest_rate_display = fields.Char(string='Tasa de Interes (%)', compute='_compute_interest_rate_display', store=False)
@@ -243,8 +243,14 @@ class Loan(models.Model):
         Journal = self.env['account.journal']
 
         for loan in self:
-            if not loan.partner_id.loan_account:
+            partner_acc = loan.partner_id.loan_account
+            if not partner_acc:
                 raise ValidationError("El cliente debe tener definida una Cuenta de Préstamo (loan_account).")
+            if loan.company_id not in partner_acc.company_ids:
+                raise ValidationError(
+                    f"La Cuenta de Préstamo del cliente ({partner_acc.display_name}) "
+                    f"no pertenece a la empresa {loan.company_id.name}."
+                )
 
             disburse_commission_amount = (loan.loan_amount or 0.0) * (loan.disburse_commission or 0.0) / 100.0
 
@@ -255,23 +261,27 @@ class Loan(models.Model):
                 'disburse_account_number': loan.disburse_amount or 0.0,
             }
 
-            lines = []
-            lines.append((0, 0, {
+            lines = [(0, 0, {
                 'name': loan.loan_reference,
-                'account_id': loan.partner_id.loan_account.id,
+                'account_id': partner_acc.id,
                 'partner_id': loan.partner_id.id,
                 'debit': loan.loan_amount,
                 'credit': 0.0,
-            }))
+            })]
 
             for acct_field, amount in required.items():
-                if amount and amount > 0:
+                if amount > 0:
                     code = getattr(loan, acct_field)
                     if not code:
                         raise ValidationError(f"Falta la cuenta para {acct_field}.")
-                    account = Account.search([('code', '=', code)], limit=1)
+                    account = Account.search([
+                        ('code', '=', code),
+                        ('company_ids', 'in', loan.company_id.id),
+                    ], limit=1)
                     if not account:
-                        raise ValidationError(f"No se encontró la cuenta con código {code}.")
+                        raise ValidationError(
+                            f"No se encontró la cuenta con código {code} para la empresa {loan.company_id.name}."
+                        )
                     lines.append((0, 0, {
                         'name': loan.loan_reference,
                         'account_id': account.id,
@@ -279,16 +289,22 @@ class Loan(models.Model):
                         'credit': amount,
                     }))
 
-            journal = Journal.search([('type', '=', 'general')], limit=1)
+            journal = Journal.search([
+                ('type', '=', 'general'),
+                ('company_id', '=', loan.company_id.id)
+            ], limit=1)
             if not journal:
-                raise ValidationError("No existe un diario general para registrar la partida.")
+                raise ValidationError(f"No existe un diario general en la empresa {loan.company_id.name}.")
 
             move = Move.create({
                 'ref': f'Préstamo {loan.loan_reference}',
                 'date': loan.create_date_only or fields.Date.today(),
-                'loan_manager_id': loan.id,
                 'journal_id': journal.id,
+                'company_id': loan.company_id.id,
+                'currency_id': loan.company_id.currency_id.id,
+                'loan_manager_id': loan.id,
                 'line_ids': lines,
+
             })
             move.action_post()
             loan.write({'register_move_id': move.id})
@@ -307,37 +323,55 @@ class Loan(models.Model):
                 raise ValidationError("Defina la cuenta bancaria de desembolso en el Tipo de Préstamo.")
             if bank_account.account_type != 'asset_cash':
                 raise ValidationError("La cuenta bancaria de desembolso debe ser de tipo 'Bank & Cash'.")
+            if loan.company_id not in bank_account.company_ids:
+                raise ValidationError(
+                    f"La cuenta bancaria {bank_account.display_name} no pertenece a la empresa {loan.company_id.name}."
+                )
 
             if not loan.disburse_account_number:
                 raise ValidationError("Falta la cuenta de Desembolso (código) en el préstamo.")
-            disb_account = Account.search([('code', '=', loan.disburse_account_number)], limit=1)
+            disb_account = Account.search([
+                ('code', '=', loan.disburse_account_number),
+                ('company_ids', 'in', loan.company_id.id),
+            ], limit=1)
             if not disb_account:
-                raise ValidationError(f"No se encontró la cuenta con código {loan.disburse_account_number}.")
+                raise ValidationError(
+                    f"No se encontró la cuenta con código {loan.disburse_account_number} "
+                    f"para la empresa {loan.company_id.name}."
+                )
 
+            amount = loan.disburse_amount
             lines = [
                 (0, 0, {
                     'name': f'Desembolso {loan.loan_reference}',
                     'account_id': disb_account.id,
-                    'debit': loan.disburse_amount,
+                    'debit': amount,
                     'credit': 0.0,
                 }),
                 (0, 0, {
                     'name': f'Desembolso {loan.loan_reference}',
                     'account_id': bank_account.id,
                     'debit': 0.0,
-                    'credit': loan.disburse_amount,
+                    'credit': amount,
                 }),
             ]
 
-            journal = Journal.search([('type', 'in', ('bank', 'cash'))], limit=1) \
-                      or Journal.search([('type', '=', 'general')], limit=1)
+            journal = Journal.search([
+                ('type', 'in', ('bank', 'cash')),
+                ('company_id', '=', loan.company_id.id),
+            ], limit=1) or Journal.search([
+                ('type', '=', 'general'),
+                ('company_id', '=', loan.company_id.id),
+            ], limit=1)
             if not journal:
-                raise ValidationError("No existe un diario para registrar el desembolso.")
+                raise ValidationError(f"No existe un diario para registrar el desembolso en {loan.company_id.name}.")
 
             move = Move.create({
                 'ref': f'Desembolso {loan.loan_reference}',
                 'date': loan.create_date_only or fields.Date.today(),
                 'journal_id': journal.id,
+                'company_id': loan.company_id.id,
+                'currency_id': loan.company_id.currency_id.id,
                 'loan_manager_id': loan.id,
                 'line_ids': lines,
             })
@@ -538,6 +572,8 @@ class LoanRepayment(models.Model):
 
         rec = self
         loan = rec.loan_id
+        company = loan.company_id
+        company_currency = company.currency_id
         loan_type = loan.loan_type_id
         partner = loan.partner_id
 
@@ -550,37 +586,53 @@ class LoanRepayment(models.Model):
         if rec.total_payment <= 0:
             raise ValidationError("El pago total debe ser mayor que 0.")
 
-        journal = Journal.search([('type', 'in', ('bank', 'cash'))], limit=1) \
-                  or Journal.search([('type', '=', 'general')], limit=1)
+        journal = Journal.search([
+            ('type', 'in', ('bank', 'cash')),
+            ('company_id', '=', company.id),
+        ], limit=1) or Journal.search([
+            ('type', '=', 'general'),
+            ('company_id', '=', company.id),
+        ], limit=1)
         if not journal:
-            raise ValidationError("No se encontró un diario para registrar el pago.")
+            raise ValidationError(f"No se encontró un diario para {company.name}.")
+
+        def _line(vals):
+            v = dict(vals)
+            v.setdefault('currency_id', company_currency.id)
+            v.setdefault('amount_currency', (v.get('debit', 0.0) or 0.0) - (v.get('credit', 0.0) or 0.0))
+            return v
 
         lines = [
-            (0, 0, {
+
+            (0, 0, _line({
                 'name': f'Pago cuota {rec.sequence} {loan.loan_reference}',
                 'account_id': loan_type.disburse_bank_account.id,
                 'debit': rec.total_payment,
                 'credit': 0.0,
-            }),
-            (0, 0, {
+            })),
+
+            (0, 0, _line({
                 'name': f'Capital cuota {rec.sequence} {loan.loan_reference}',
                 'account_id': partner.loan_account.id,
                 'partner_id': partner.id,
                 'debit': 0.0,
                 'credit': rec.principal,
-            }),
-            (0, 0, {
+            })),
+
+            (0, 0, _line({
                 'name': f'Interés cuota {rec.sequence} {loan.loan_reference}',
                 'account_id': loan_type.interest_account.id,
                 'debit': 0.0,
                 'credit': rec.interest,
-            }),
+            })),
         ]
 
         move = AccountMove.create({
             'ref': f'Pago cuota {rec.sequence} {loan.loan_reference}',
             'date': rec.due_date or fields.Date.today(),
             'journal_id': journal.id,
+            'company_id': company.id,
+            'currency_id': company_currency.id,
             'line_ids': lines,
         })
         move.action_post()
