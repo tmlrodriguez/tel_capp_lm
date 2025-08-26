@@ -110,7 +110,7 @@
                 <group col="2">
                     <group>
                         <field name="partner_id" domain="[('is_company','=', True)]" readonly="loan_status not in ('draft', 'confirmed', 'pending')"/>
-                        <field name="loan_type_id" readonly="loan_status not in ('draft', 'confirmed', 'pending')"/>
+                        <field name="loan_type_id" readonly="loan_status not in ('draft', 'confirmed', 'pending')" domain="[('company_id', 'in', allowed_company_ids)]"/>
                         <field name="loan_amount" readonly="loan_status not in ('draft', 'confirmed', 'pending')"/>
                         <field name="tenure" readonly="loan_status not in ('draft', 'confirmed', 'pending')"/>
                         <field name="interest_rate" readonly="loan_status not in ('draft', 'confirmed', 'pending')"/>
@@ -191,11 +191,6 @@
                                            decoration-danger="status == 'pending'"
                                            decoration-success="status == 'paid'"/>
                                     <field name="move_id" widget="many2one"/>
-<!--                                    <button name="action_mark_as_paid"-->
-<!--                                            type="object"-->
-<!--                                            string="Pagar"-->
-<!--                                            class="btn-primary"-->
-<!--                                            invisible="loan_status != 'disbursed' or status == 'paid'"/>-->
                                     <button name="%(action_repayment_confirm_wizard)d"
                                             type="action"
                                             string="Pagar"
@@ -215,6 +210,6 @@
         <field name="name">Solicitudes de Prestamos</field>
         <field name="res_model">loan.manager.loan</field>
         <field name="view_mode">list,form</field>
-        <field name="domain">[('company_id', '=', 1)]</field>
+        <field name="domain">[('company_id', 'in', allowed_company_ids)]</field>
     </record>
 </odoo>

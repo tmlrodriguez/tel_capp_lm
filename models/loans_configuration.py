@@ -25,7 +25,7 @@ class LoanRequirement(models.Model):
     )
 
     _sql_constraints = [
-        ('unique_loan_requirement', 'UNIQUE(loan_requirement)', 'El nombre del requisito debe ser único.')
+        ('unique_loan_requirement_company', 'UNIQUE(loan_requirement, company_id)', 'El nombre del requisito debe ser único por empresa.'),
     ]
 
     @api.model_create_multi
@@ -96,8 +96,11 @@ class LoanType(models.Model):
         tracking=True,
         required=True,
     )
-
     interest_rate_display = fields.Char(string='Tasa de Interes (%)', compute='_compute_interest_rate_display', store=False)
+
+    _sql_constraints = [
+        ('unique_loan_type_company', 'UNIQUE(loan_name, company_id)', 'El nombre del préstamo debe ser único por empresa.'),
+    ]
 
     @api.model_create_multi
     def create(self, vals_list):
