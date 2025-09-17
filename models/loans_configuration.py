@@ -58,7 +58,7 @@ class LoanType(models.Model):
     description = fields.Char(string='Descripción', required=False, tracking=True)
     max_amount = fields.Float(string='Monto Maximo', required=True, tracking=True)
     max_tenure = fields.Integer(string='Plazo Maximo', required=True, tracking=True)
-    payment_account = fields.Many2one('account.account', string='Cuenta de Cuotas', required=False, tracking=True)
+    payment_account = fields.Many2one('account.account', string='Cuenta de Cuotas', required=True, tracking=True)
     tenure_plan = fields.Selection([
         ('monthly', 'Mensual'),
         ('biweekly', 'Quincenal'),
@@ -67,9 +67,9 @@ class LoanType(models.Model):
     amortization_method = fields.Selection([
         ('french', 'Cuota Nivelada'),
         ('german', 'Cuota Sobre Saldos Insolutos')
-    ], string='Método de Amortización')
-    disburse_account = fields.Many2one('account.account', string='Cuenta de Desembolso', required=True, tracking=True, domain="[('code', '=ilike', '2%')]")
-    disburse_bank_account = fields.Many2one('account.account', string='Cuenta Bancaria de Desembolso Y Pago de Cuotas', domain=[('account_type', '=', 'asset_cash')], required=True, tracking=True)
+    ], string='Método de Amortización', required=True)
+    disburse_account = fields.Many2one('account.account', string='Cuenta Provisión de Desembolso', required=True, tracking=True, domain="[('code', '=ilike', '2%')]")
+    disburse_bank_account = fields.Many2one('account.account', string='Cuenta Bancaria de Desembolso', domain=[('account_type', '=', 'asset_cash')], required=True, tracking=True)
     disburse_commission = fields.Float(string='Comision por Desembolso (%)', required=True, tracking=True)
     disburse_commission_account = fields.Many2one('account.account', string='Cuenta de Comisión por Desembolso', required=True, tracking=True, domain="[('code', '=ilike', '4%')]")
     anticipated_payment_commission = fields.Float(string='Comision por Pago Anticipado (%)', required=True, tracking=True)
@@ -125,13 +125,20 @@ class LoanType(models.Model):
         return super().write(vals)
 
     # Validations
+    @api.constrains('max_amount', 'max_tenure')
+    def _check_positive_values(self):
+        for record in self:
+            if record.max_amount <= 0:
+                raise ValidationError("El monto máximo debe ser mayor que 0.")
+            if record.max_tenure <= 0:
+                raise ValidationError("El plazo máximo debe ser mayor que 0.")
+
     def _validate_percentage_rates(self, vals):
         to_check = {
             'interest_rate': 'Interés',
             'disburse_commission': 'Comisión por desembolso',
             'anticipated_payment_commission': 'Comisión por pago anticipado'
         }
-
         for field, label in to_check.items():
             if field in vals:
                 value = vals[field]
