@@ -382,44 +382,55 @@ class Loan(models.Model):
     def action_calculate_repayments(self):
         for loan in self:
             self.env['loan.manager.repayment'].search([('loan_id', '=', loan.id)]).unlink()
-            if loan.interest_rate == 0:
-                raise ValidationError('La tasa no puede ser igual a 0')
-            principal = loan.loan_amount
-            rate = (loan.interest_rate / 100) / 12
-            months = loan.tenure
+            principal = loan.loan_amount or 0.0
+            months = loan.tenure or 0
+            if months <= 0:
+                raise ValidationError('El plazo debe ser mayor que 0.')
+            rate = ((loan.interest_rate or 0.0) / 100.0) / 12.0
             start_date = loan.create_date_only or fields.Date.today()
-            method = loan.loan_type_id.amortization_method
-            repayments = []
-            remaining = principal
+            method = loan.loan_type_id.amortization_method or 'french'
+            repayments, remaining = [], principal
 
             if method == 'french':
-                payment = (principal * rate) / (1 - (1 + rate) ** -months)
-                for i in range(1, months + 1):
-                    interest = remaining * rate
-                    capital = payment - interest
-                    repayments.append((0, 0, {
-                        'sequence': i,
-                        'due_date': fields.Date.add(start_date, months=i),
-                        'principal': round(capital, 2),
-                        'interest': round(interest, 2),
-                        'remaining_balance': round(remaining - capital, 2)
-                    }))
-                    remaining -= capital
+                if rate == 0:
+                    payment = principal / months
+                    for i in range(1, months + 1):
+                        interest = 0.0
+                        capital = payment
+                        remaining = max(0.0, remaining - capital)
+                        repayments.append((0, 0, {
+                            'sequence': i,
+                            'due_date': fields.Date.add(start_date, months=i),
+                            'principal': round(capital, 2),
+                            'interest': round(interest, 2),
+                            'remaining_balance': round(remaining, 2),
+                        }))
+                else:
+                    payment = (principal * rate) / (1 - (1 + rate) ** (-months))
+                    for i in range(1, months + 1):
+                        interest = remaining * rate
+                        capital = payment - interest
+                        remaining = max(0.0, remaining - capital)
+                        repayments.append((0, 0, {
+                            'sequence': i,
+                            'due_date': fields.Date.add(start_date, months=i),
+                            'principal': round(capital, 2),
+                            'interest': round(interest, 2),
+                            'remaining_balance': round(remaining, 2),
+                        }))
 
             elif method == 'german':
                 capital = principal / months
                 for i in range(1, months + 1):
                     interest = remaining * rate
-                    total = capital + interest
+                    remaining = max(0.0, remaining - capital)
                     repayments.append((0, 0, {
                         'sequence': i,
                         'due_date': fields.Date.add(start_date, months=i),
                         'principal': round(capital, 2),
                         'interest': round(interest, 2),
-                        'remaining_balance': round(remaining - capital, 2)
+                        'remaining_balance': round(remaining, 2),
                     }))
-                    remaining -= capital
-
             loan.write({'loan_repayment_ids': repayments})
         self.write({'repayments_dirty': False})
 
@@ -539,6 +550,7 @@ class LoanRepayment(models.Model):
     """
     _name = 'loan.manager.repayment'
     _description = 'Loan Repayment'
+
     loan_id = fields.Many2one('loan.manager.loan', string='Prestamo', required=True, ondelete='cascade')
     sequence = fields.Integer(string='Número de Cuota', required=True)
     due_date = fields.Date(string='Fecha de Pago', required=True)
@@ -606,7 +618,7 @@ class LoanRepayment(models.Model):
 
             (0, 0, _line({
                 'name': f'Pago cuota {rec.sequence} {loan.loan_reference}',
-                'account_id': loan_type.disburse_bank_account.id,
+                'account_id': loan_type.payment_account.id,
                 'debit': rec.total_payment,
                 'credit': 0.0,
             })),
@@ -659,7 +671,6 @@ class LoanRepaymentConfirmWizard(models.TransientModel):
     """
     _name = 'loan.manager.repayment.confirm.wizard'
     _description = 'Confirmar pago de cuota'
-
     repayment_id = fields.Many2one('loan.manager.repayment', required=True, readonly=True)
     principal = fields.Float(string='Capital', readonly=True)
     interest = fields.Float(string='Interés', readonly=True)
@@ -693,7 +704,6 @@ class LoanRejectWizard(models.TransientModel):
     """
     _name = 'loan.manager.reject.wizard'
     _description = 'Rechazar Préstamo'
-
     loan_id = fields.Many2one('loan.manager.loan', string='Préstamo', required=True, ondelete='cascade')
     reason = fields.Text(string='Motivo del Rechazo', required=True)
 
