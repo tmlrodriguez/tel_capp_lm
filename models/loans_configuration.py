@@ -68,6 +68,7 @@ class LoanType(models.Model):
         ('french', 'Cuota Nivelada'),
         ('german', 'Cuota Sobre Saldos Insolutos')
     ], string='Método de Amortización', required=True)
+    loan_account = fields.Many2one('account.account', string='Cuenta por Cobrar Cliente', company_dependent=True, domain="[('code', '=ilike', '1%')]", required=True, tracking=True)
     disburse_account = fields.Many2one('account.account', string='Cuenta Provisión de Desembolso', required=True, tracking=True, domain="[('code', '=ilike', '2%')]")
     disburse_bank_account = fields.Many2one('account.account', string='Cuenta Bancaria de Desembolso', domain=[('account_type', '=', 'asset_cash')], required=True, tracking=True)
     disburse_commission = fields.Float(string='Comision por Desembolso (%)', required=True, tracking=True)
@@ -153,6 +154,15 @@ class LoanType(models.Model):
     def _compute_interest_rate_display(self):
         for record in self:
             record.interest_rate_display = f"{record.interest_rate:.2f}%"
+
+    @api.onchange('company_id')
+    def _onchange_company_id(self):
+        active_company_id = self.company_id.id or self.env.company.id
+        return {
+            'domain': {
+                'loan_account': [('company_ids', 'in', [active_company_id])]
+            }
+        }
 
 
 

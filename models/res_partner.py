@@ -7,13 +7,6 @@ class ResPartner(models.Model):
     """
     _inherit = 'res.partner'
 
-    loan_account = fields.Many2one(
-        'account.account',
-        string='Cuenta de Préstamos',
-        company_dependent=True,
-        domain="[('code', '=ilike', '1%')]"
-    )
-
     loan_ids = fields.One2many(
         'loan.manager.loan',
         'partner_id',
@@ -25,15 +18,6 @@ class ResPartner(models.Model):
         compute='_compute_loan_remaining_total',
         readonly=True
     )
-
-    @api.onchange('company_id')
-    def _onchange_company_id(self):
-        active_company_id = self.company_id.id or self.env.company.id
-        return {
-            'domain': {
-                'loan_account': [('company_ids', 'in', [active_company_id])]
-            }
-        }
 
     @api.depends('loan_ids.loan_repayment_ids.status', 'loan_ids.loan_repayment_ids.remaining_balance')
     def _compute_loan_remaining_total(self):

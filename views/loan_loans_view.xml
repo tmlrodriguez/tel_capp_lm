@@ -18,6 +18,7 @@
               <field name="principal" readonly="1"/>
               <field name="interest" readonly="1"/>
               <field name="total_to_pay" readonly="1"/>
+              <field name="payment_date"/>
             </group>
             <footer>
               <button string="Cancelar" special="cancel" class="btn-secondary"/>
@@ -147,6 +148,7 @@
                         <page string="Contabilidad" invisible="loan_status == 'draft'">
                               <group col="2">
                                     <group>
+                                      <field name="loan_account_number" readonly="1"/>
                                       <field name="disburse_account_number" readonly="1"/>
                                       <field name="disburse_bank_account_number" readonly="1"/>
                                       <field name="interest_account_number" readonly="1"/>

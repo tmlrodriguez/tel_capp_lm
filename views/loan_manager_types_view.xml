@@ -45,6 +45,7 @@
                     </page>
                     <page string="Desembolso">
                         <group string="Desembolso" col="2">
+                            <field name="loan_account"/>
                             <field name="disburse_account"/>
                             <field name="disburse_bank_account"/>
                         </group>
