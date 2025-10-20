@@ -550,15 +550,17 @@ class LoanRepayment(models.Model):
     loan_id = fields.Many2one('loan.manager.loan', string='Prestamo', required=True, ondelete='cascade')
     sequence = fields.Integer(string='Número de Cuota', required=True)
     due_date = fields.Date(string='Fecha de Pago', required=True)
+    payment_date = fields.Date(string='Fecha de Contabilización')
     principal = fields.Float(string='Capital', required=True)
     interest = fields.Float(string='Interés', required=True)
     total_payment = fields.Float(string='Pago Total', compute='_compute_total_payment', store=True)
     remaining_balance = fields.Float(string='Saldo Restante', required=True)
-    payment_date = fields.Date(string='Fecha de Contabilización')
     loan_status = fields.Selection(related='loan_id.loan_status', store=True)
     status = fields.Selection([
         ('pending', 'Pendiente'),
         ('paid', 'Pagado'),
+        ('partial', 'Parcial'),
+        ('extra', 'Extra'),
     ], default='pending', readonly=True, copy=False)
     move_id = fields.Many2one('account.move', string='Asiento', readonly=True, copy=False, ondelete='set null', help='Asiento contable creado al registrar el pago de esta cuota.')
 
@@ -574,7 +576,7 @@ class LoanRepayment(models.Model):
         for rec in self:
             rec.total_payment = rec.principal + rec.interest
 
-    def _create_payment_move(self, payment_date=None):
+    def _create_payment_move(self, capital=None, interest=None, payment_date=None):
         self.ensure_one()
         AccountMove = self.env['account.move']
         Journal = self.env['account.journal']
@@ -586,13 +588,18 @@ class LoanRepayment(models.Model):
         partner = loan.partner_id
 
         if not loan.loan_account_number:
-            raise ValidationError("El tipo de prestamo no tiene configurada la Cuenta de Préstamos (loan_account).")
+            raise ValidationError("El tipo de préstamo no tiene configurada la Cuenta de Préstamos (loan_account).")
         if not loan.payment_account_number:
-            raise ValidationError("El Tipo de Préstamo no tiene configurada la Cuenta de Cuotas (payment_account).")
+            raise ValidationError("El tipo de préstamo no tiene configurada la Cuenta de Cuotas (payment_account).")
         if not loan.interest_account_number:
-            raise ValidationError("El Tipo de Préstamo no tiene configurada la Cuenta de Interés (interest_account).")
-        if rec.total_payment <= 0:
-            raise ValidationError("El pago total debe ser mayor que 0.")
+            raise ValidationError("El tipo de préstamo no tiene configurada la Cuenta de Interés (interest_account).")
+
+        capital = capital or 0.0
+        interest = interest or 0.0
+        total_payment = capital + interest
+
+        if total_payment <= 0:
+            raise ValidationError("El monto del pago debe ser mayor que 0.")
 
         journal = Journal.search([
             ('type', 'in', ('bank', 'cash')),
@@ -602,7 +609,7 @@ class LoanRepayment(models.Model):
             ('company_id', '=', company.id),
         ], limit=1)
         if not journal:
-            raise ValidationError(f"No se encontró un diario para {company.name}.")
+            raise ValidationError(f"No se encontró un diario para la empresa {company.name}.")
 
         def _line(vals):
             v = dict(vals)
@@ -610,30 +617,31 @@ class LoanRepayment(models.Model):
             v.setdefault('amount_currency', (v.get('debit', 0.0) or 0.0) - (v.get('credit', 0.0) or 0.0))
             return v
 
-        lines = [
+        lines = []
 
-            (0, 0, _line({
-                'name': f'Pago cuota {rec.sequence} {loan.loan_reference}',
-                'account_id': loan.payment_account_number.id,
-                'debit': rec.total_payment,
-                'credit': 0.0,
-            })),
+        lines.append((0, 0, _line({
+            'name': f'Pago cuota {rec.sequence} {loan.loan_reference}',
+            'account_id': loan.payment_account_number.id,
+            'debit': total_payment,
+            'credit': 0.0,
+        })))
 
-            (0, 0, _line({
+        if capital > 0:
+            lines.append((0, 0, _line({
                 'name': f'Capital cuota {rec.sequence} {loan.loan_reference}',
                 'account_id': loan.loan_account_number.id,
                 'partner_id': partner.id,
                 'debit': 0.0,
-                'credit': rec.principal,
-            })),
+                'credit': capital,
+            })))
 
-            (0, 0, _line({
+        if interest > 0:
+            lines.append((0, 0, _line({
                 'name': f'Interés cuota {rec.sequence} {loan.loan_reference}',
                 'account_id': loan.interest_account_number.id,
                 'debit': 0.0,
-                'credit': rec.interest,
-            })),
-        ]
+                'credit': interest,
+            })))
 
         move = AccountMove.create({
             'ref': f'Pago cuota {rec.sequence} {loan.loan_reference}',
@@ -643,6 +651,7 @@ class LoanRepayment(models.Model):
             'currency_id': company_currency.id,
             'line_ids': lines,
         })
+
         move.action_post()
         return move
 
@@ -651,14 +660,69 @@ class LoanRepayment(models.Model):
             previous_unpaid = self.env['loan.manager.repayment'].search([
                 ('loan_id', '=', record.loan_id.id),
                 ('sequence', '<', record.sequence),
-                ('status', '=', 'pending'),
+                ('status', 'not in', ['paid', 'partial']),
             ])
             if previous_unpaid:
                 raise ValidationError(
                     f"No puede marcar como pagada la cuota #{record.sequence} porque la cuota #{previous_unpaid[0].sequence} aún está pendiente."
                 )
-            move = record._create_payment_move(payment_date)
+            move = record._create_payment_move(capital=record.principal, interest=record.interest, payment_date=payment_date)
             record.write({'status': 'paid', 'move_id': move.id, 'payment_date': payment_date})
+
+    def action_partial_payment(self, amount, payment_date=None):
+        self.ensure_one()
+        loan = self.loan_id
+
+        if amount <= 0:
+            raise ValidationError("El monto parcial debe ser mayor que 0.")
+
+        if self.status == 'paid':
+            raise ValidationError("Esta cuota ya está pagada completamente.")
+
+        paid_interest = min(self.interest, amount)
+        remaining_after_interest = amount - paid_interest
+        paid_principal = min(self.principal, remaining_after_interest)
+
+        remaining_interest = self.interest - paid_interest
+        remaining_principal = self.principal - paid_principal
+
+        move = self._create_payment_move(
+            capital=paid_principal,
+            interest=paid_interest,
+            payment_date=payment_date
+        )
+
+        self.write({
+            'status': 'partial',
+            'move_id': move.id,
+            'payment_date': payment_date,
+        })
+
+        last_due_date = max(loan.loan_repayment_ids.mapped('due_date') or [self.due_date])
+
+        plan = loan.loan_type_id.tenure_plan or 'monthly'
+        if plan == 'monthly':
+            new_due_date = fields.Date.add(last_due_date, months=1)
+        elif plan == 'biweekly':
+            new_due_date = fields.Date.add(last_due_date, days=14)
+        elif plan == 'weekly':
+            new_due_date = fields.Date.add(last_due_date, days=7)
+        else:
+            new_due_date = fields.Date.add(last_due_date, months=1)
+
+        new_sequence = max(loan.loan_repayment_ids.mapped('sequence') or [0]) + 1
+
+        self.env['loan.manager.repayment'].create({
+            'loan_id': loan.id,
+            'sequence': new_sequence,
+            'due_date': new_due_date,
+            'principal': round(remaining_principal, 2),
+            'interest': round(remaining_interest, 2),
+            'remaining_balance': 0,
+            'status': 'extra',
+        })
+
+        return True
 
 
 class LoanRepaymentConfirmWizard(models.TransientModel):
@@ -671,6 +735,7 @@ class LoanRepaymentConfirmWizard(models.TransientModel):
     principal = fields.Float(string='Capital', readonly=True)
     interest = fields.Float(string='Interés', readonly=True)
     total_to_pay = fields.Float(string='Total a Pagar', readonly=True)
+    partial_amount = fields.Float(string='Monto a Pagar (Parcial o Total)', required=True)
     payment_date = fields.Date(string='Fecha de Contabilización', required=True, default=fields.Date.today)
 
     @api.model
@@ -683,15 +748,23 @@ class LoanRepaymentConfirmWizard(models.TransientModel):
                 'principal': repayment.principal,
                 'interest': repayment.interest,
                 'total_to_pay': repayment.total_payment,
+                'partial_amount': repayment.total_payment,
             })
         return res
 
     def action_confirm(self):
         self.ensure_one()
         r = self.repayment_id.sudo()
-        if r.loan_status != 'disbursed' or r.status != 'pending':
+
+        if r.loan_status != 'disbursed' or r.status not in ['pending', 'extra']:
             raise ValidationError("Solo puede pagar cuotas pendientes de préstamos desembolsados.")
-        r.action_mark_as_paid(self.payment_date)
+        amount = self.partial_amount
+        if amount <= 0:
+            raise ValidationError("El monto a pagar debe ser mayor que 0.")
+        if amount >= r.total_payment:
+            r.action_mark_as_paid(payment_date=self.payment_date)
+        else:
+            r.action_partial_payment(amount, payment_date=self.payment_date)
         return {'type': 'ir.actions.act_window_close'}
 
 

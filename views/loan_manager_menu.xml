@@ -1,6 +1,6 @@
 <odoo>
   <menuitem id="menu_loan_manager_root"
-            name="ADICCAPP Prestamos"
+            name="Prestamos"
             web_icon="tel_capp_lm,static/description/icon.png"
             sequence="1"/>
 

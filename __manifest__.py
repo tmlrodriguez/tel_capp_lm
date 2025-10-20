@@ -1,5 +1,5 @@
 {
-    'name': 'ADDICAPP Prestamos',
+    'name': 'Prestamos',
     'version': '1.0.0',
     'summary': 'Administrador de prestamos otorgados por ADDICAPP',
     'description': 'Diseñado para gestionar programas internos de préstamos dentro de una asociación. Permite a los '
