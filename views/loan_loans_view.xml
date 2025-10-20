@@ -18,6 +18,7 @@
               <field name="principal" readonly="1"/>
               <field name="interest" readonly="1"/>
               <field name="total_to_pay" readonly="1"/>
+                <field name="partial_amount"/>
               <field name="payment_date"/>
             </group>
             <footer>
@@ -191,13 +192,15 @@
                                            width="150px"
                                            readonly="1"
                                            decoration-danger="status == 'pending'"
-                                           decoration-success="status == 'paid'"/>
+                                           decoration-success="status == 'paid'"
+                                           decoration-warning="status == 'partial'"
+                                           decoration-secondary="status == 'extra'"/>
                                     <field name="move_id" widget="many2one"/>
                                     <button name="%(action_repayment_confirm_wizard)d"
                                             type="action"
                                             string="Pagar"
                                             class="btn-primary"
-                                            invisible="loan_status != 'disbursed' or status == 'paid'"/>
+                                            invisible="loan_status != 'disbursed' or status in ('paid', 'partial')"/>
                                 </list>
                             </field>
                         </page>
