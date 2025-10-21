@@ -167,7 +167,7 @@ class Loan(models.Model):
                 loan.amount_pending = 0.0
                 continue
             paid = sum(loan.loan_repayment_ids.filtered(lambda r: r.status == 'paid').mapped('principal'))
-            pending = sum(loan.loan_repayment_ids.filtered(lambda r: r.status == 'pending').mapped('principal'))
+            pending = sum(loan.loan_repayment_ids.filtered(lambda r: r.status in ['pending', 'extra']).mapped('principal'))
             loan.amount_paid = math.floor(paid)
             loan.amount_pending = math.floor(pending)
 

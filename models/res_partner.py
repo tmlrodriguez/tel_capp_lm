@@ -26,6 +26,6 @@ class ResPartner(models.Model):
             for loan in partner.loan_ids:
                 if loan.loan_status == 'disbursed':
                     for rep in loan.loan_repayment_ids:
-                        if rep.status == 'pending':
+                        if rep.status in ['pending', 'extra']:
                             total += rep.principal
             partner.loan_remaining_total = math.floor(total)
