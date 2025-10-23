@@ -16,7 +16,7 @@
 
         <separator/>
 
-        <field name="loan_reference"/>
+        <field name="reference"/>
         <field name="partner_id"/>
         <field name="loan_type_id"/>
 

@@ -10,6 +10,8 @@
     'category': 'Accounting',
     'depends': ['base', 'accountant', 'mail'],
     'data': [
+        # Data
+        'data/ir_sequence_data.xml',
         # Security
         'security/ir.model.access.csv',
         # Views

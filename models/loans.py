@@ -1,5 +1,5 @@
 import math
-from odoo import models, fields, api
+from odoo import models, fields, api, _
 from odoo.exceptions import ValidationError
 
 # Define your models here.
@@ -12,10 +12,10 @@ class Loan(models.Model):
 
     _name = 'loan.manager.loan'
     _description = 'Loan'
-    _rec_name = 'loan_reference'
+    _rec_name = 'reference'
     _inherit = ['mail.thread']
 
-    loan_reference = fields.Char(string='Referencia', required=True, readonly=True, copy=False, default='LOAN0001')
+    reference = fields.Char(string='Referencia', readonly=True, copy=False, default=lambda self: _('New'), tracking=True)
     partner_id = fields.Many2one('res.partner', string='Cliente', required=True, tracking=True)
     loan_type_id = fields.Many2one('loan.manager.type', string='Tipo de Prestamo', required=True, tracking=True)
     loan_amount = fields.Float(string='Monto', required=True, tracking=True)
@@ -83,6 +83,8 @@ class Loan(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
+            if vals.get('reference', _('New')) == _('New'):
+                vals['reference'] = self.env['ir.sequence'].next_by_code('loan.manager.loan') or _('New')
             loan_type_id = vals.get('loan_type_id')
             if loan_type_id:
                 loan_type = self.env['loan.manager.type'].browse(loan_type_id)
@@ -159,17 +161,24 @@ class Loan(models.Model):
         for record in self:
             record.interest_rate_display = f"{record.interest_rate:.2f}%"
 
-    @api.depends('loan_status', 'loan_repayment_ids.status', 'loan_repayment_ids.principal')
+    @api.depends('loan_repayment_ids.status', 'loan_repayment_ids.principal', 'loan_repayment_ids.interest', 'loan_repayment_ids.amount_paid')
     def _compute_paid_pending(self):
         for loan in self:
             if loan.loan_status != 'disbursed':
                 loan.amount_paid = 0.0
                 loan.amount_pending = 0.0
                 continue
-            paid = sum(loan.loan_repayment_ids.filtered(lambda r: r.status == 'paid').mapped('principal'))
-            pending = sum(loan.loan_repayment_ids.filtered(lambda r: r.status in ['pending', 'extra']).mapped('principal'))
-            loan.amount_paid = math.floor(paid)
-            loan.amount_pending = math.floor(pending)
+            paid_total = 0.0
+            pending_total = 0.0
+            for repayment in loan.loan_repayment_ids:
+                if repayment.status == 'paid':
+                    paid_total += (repayment.principal or 0.0) + (repayment.interest or 0.0)
+                elif repayment.status == 'partial':
+                    paid_total += repayment.amount_paid or 0.0
+                elif repayment.status in ['pending', 'extra']:
+                    pending_total += (repayment.principal or 0.0) + (repayment.interest or 0.0)
+            loan.amount_paid = round(paid_total, 2)
+            loan.amount_pending = round(pending_total, 2)
 
     @api.depends('loan_type_id.amortization_method')
     def _compute_method_display(self):
@@ -203,6 +212,8 @@ class Loan(models.Model):
     @api.onchange('loan_type_id')
     def _on_change_type_id(self):
         if self.loan_type_id:
+            self.loan_amount = self.loan_type_id.max_amount
+            self.tenure = self.loan_type_id.max_tenure
             self.interest_rate = self.loan_type_id.interest_rate
             self.disburse_commission = self.loan_type_id.disburse_commission
             self.anticipated_payment_commission = self.loan_type_id.anticipated_payment_commission
@@ -265,7 +276,7 @@ class Loan(models.Model):
             }
 
             lines = [(0, 0, {
-                'name': loan.loan_reference,
+                'name': loan.reference,
                 'account_id': loan_account.id,
                 'partner_id': loan.partner_id.id,
                 'debit': loan.loan_amount,
@@ -282,7 +293,7 @@ class Loan(models.Model):
                             f"La cuenta {account.display_name} no pertenece a la empresa {loan.company_id.name}."
                         )
                     lines.append((0, 0, {
-                        'name': loan.loan_reference,
+                        'name': loan.reference,
                         'account_id': account.id,
                         'debit': 0.0,
                         'credit': amount,
@@ -297,7 +308,7 @@ class Loan(models.Model):
                 raise ValidationError(f"No existe un diario general en la empresa {loan.company_id.name}.")
 
             move = Move.create({
-                'ref': f'Préstamo {loan.loan_reference}',
+                'ref': f'Préstamo {loan.reference}',
                 'date': loan.create_date_only or fields.Date.today(),
                 'journal_id': journal.id,
                 'company_id': loan.company_id.id,
@@ -339,13 +350,13 @@ class Loan(models.Model):
             amount = loan.disburse_amount
             lines = [
                 (0, 0, {
-                    'name': f'Desembolso {loan.loan_reference}',
+                    'name': f'Desembolso {loan.reference}',
                     'account_id': disb_account.id,
                     'debit': amount,
                     'credit': 0.0,
                 }),
                 (0, 0, {
-                    'name': f'Desembolso {loan.loan_reference}',
+                    'name': f'Desembolso {loan.reference}',
                     'account_id': bank_account.id,
                     'debit': 0.0,
                     'credit': amount,
@@ -363,7 +374,7 @@ class Loan(models.Model):
                 raise ValidationError(f"No existe un diario para registrar el desembolso en {loan.company_id.name}.")
 
             move = Move.create({
-                'ref': f'Desembolso {loan.loan_reference}',
+                'ref': f'Desembolso {loan.reference}',
                 'date': loan.create_date_only or fields.Date.today(),
                 'journal_id': journal.id,
                 'company_id': loan.company_id.id,
@@ -443,7 +454,7 @@ class Loan(models.Model):
                     documentation_model.create({
                         'loan_id': record.id,
                         'requirement_id': requirement.id,
-                        'loan_documentation_reference': 'New',
+                        'reference': 'New',
                         'filename': '',
                         'file': False,
                     })
@@ -492,10 +503,10 @@ class LoanDocumentation(models.Model):
     """
     _name = 'loan.manager.documentation'
     _description = 'Loan Documentation'
-    _rec_name = 'loan_documentation_reference'
+    _rec_name = 'reference'
     _inherit = ['mail.thread']
 
-    loan_documentation_reference = fields.Char(string='Referencia', required=True, readonly=True, copy=False, default='1')
+    reference = fields.Char(string='Referencia', readonly=True, copy=False, default=lambda self: _('New'), tracking=True)
     loan_id = fields.Many2one('loan.manager.loan', string='Prestamo', required=True, readonly=True, copy=False)
     requirement_id = fields.Many2one('loan.manager.requirement', string='Requisito', required=True, readonly=True, copy=False)
     mandatory = fields.Boolean(related='requirement_id.mandatory', string='Obligatorio', store=False)
@@ -509,11 +520,13 @@ class LoanDocumentation(models.Model):
     @api.model_create_multi
     def create(self, vals_list):
         for vals in vals_list:
+            if vals.get('reference', _('New')) == _('New'):
+                vals['reference'] = self.env['ir.sequence'].next_by_code('loan.manager.documentation') or _('New')
             loan = self.env['loan.manager.loan'].browse(vals['loan_id'])
             if loan.loan_status != 'confirmed':
                 raise ValidationError("Solo puede subir documentos cuando el préstamo está en estado 'Confirmado'.")
-            if vals.get('loan_documentation_reference', 'New') == 'New':
-                vals['loan_documentation_reference'] = self.env['ir.sequence'].next_by_code(
+            if vals.get('reference', 'New') == 'New':
+                vals['reference'] = self.env['ir.sequence'].next_by_code(
                     'loan.documentation') or 'New'
             if vals.get('file') and not vals.get('filename'):
                 loan = self.env['loan.manager.loan'].browse(vals['loan_id'])
@@ -547,6 +560,7 @@ class LoanRepayment(models.Model):
     _name = 'loan.manager.repayment'
     _description = 'Loan Repayment'
 
+    reference = fields.Char(string='Referencia', readonly=True, copy=False, default=lambda self: _('New'), tracking=True)
     loan_id = fields.Many2one('loan.manager.loan', string='Prestamo', required=True, ondelete='cascade')
     sequence = fields.Integer(string='Número de Cuota', required=True)
     due_date = fields.Date(string='Fecha de Pago', required=True)
@@ -554,6 +568,7 @@ class LoanRepayment(models.Model):
     principal = fields.Float(string='Capital', required=True)
     interest = fields.Float(string='Interés', required=True)
     total_payment = fields.Float(string='Pago Total', compute='_compute_total_payment', store=True)
+    amount_paid = fields.Float(string='Monto Pagado', default=0)
     remaining_balance = fields.Float(string='Saldo Restante', required=True)
     loan_status = fields.Selection(related='loan_id.loan_status', store=True)
     status = fields.Selection([
@@ -564,8 +579,15 @@ class LoanRepayment(models.Model):
     ], default='pending', readonly=True, copy=False)
     move_id = fields.Many2one('account.move', string='Asiento', readonly=True, copy=False, ondelete='set null', help='Asiento contable creado al registrar el pago de esta cuota.')
 
+    @api.model_create_multi
+    def create(self, vals_list):
+        for vals in vals_list:
+            if vals.get('reference', _('New')) == _('New'):
+                vals['reference'] = self.env['ir.sequence'].next_by_code('loan.manager.repayment') or _('New')
+        return super().create(vals_list)
+
     def write(self, vals):
-        allowed = {'status', 'move_id', 'payment_date'}
+        allowed = {'status', 'move_id', 'payment_date', 'amount_paid'}
         illegal = set(vals.keys()) - allowed
         if illegal:
             raise ValidationError("Las cuotas no se pueden editar manualmente.")
@@ -620,7 +642,7 @@ class LoanRepayment(models.Model):
         lines = []
 
         lines.append((0, 0, _line({
-            'name': f'Pago cuota {rec.sequence} {loan.loan_reference}',
+            'name': f'Pago cuota {rec.sequence} {loan.reference}',
             'account_id': loan.payment_account_number.id,
             'debit': total_payment,
             'credit': 0.0,
@@ -628,7 +650,7 @@ class LoanRepayment(models.Model):
 
         if capital > 0:
             lines.append((0, 0, _line({
-                'name': f'Capital cuota {rec.sequence} {loan.loan_reference}',
+                'name': f'Capital cuota {rec.sequence} {loan.reference}',
                 'account_id': loan.loan_account_number.id,
                 'partner_id': partner.id,
                 'debit': 0.0,
@@ -637,14 +659,14 @@ class LoanRepayment(models.Model):
 
         if interest > 0:
             lines.append((0, 0, _line({
-                'name': f'Interés cuota {rec.sequence} {loan.loan_reference}',
+                'name': f'Interés cuota {rec.sequence} {loan.reference}',
                 'account_id': loan.interest_account_number.id,
                 'debit': 0.0,
                 'credit': interest,
             })))
 
         move = AccountMove.create({
-            'ref': f'Pago cuota {rec.sequence} {loan.loan_reference}',
+            'ref': f'Pago cuota {rec.sequence} {loan.reference}',
             'date': payment_date,
             'journal_id': journal.id,
             'company_id': company.id,
@@ -696,6 +718,7 @@ class LoanRepayment(models.Model):
             'status': 'partial',
             'move_id': move.id,
             'payment_date': payment_date,
+            'amount_paid': amount,
         })
 
         last_due_date = max(loan.loan_repayment_ids.mapped('due_date') or [self.due_date])
