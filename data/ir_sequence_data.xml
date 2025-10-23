@@ -1,0 +1,25 @@
+<odoo>
+    <record id="seq_loan_reference" model="ir.sequence">
+        <field name="name">Loan Reference</field>
+        <field name="code">loan.manager.loan</field>
+        <field name="prefix">LOAN-</field>
+        <field name="padding">5</field>
+        <field name="company_id" eval="1"/>
+    </record>
+
+    <record id="seq_loan_documentation_reference" model="ir.sequence">
+        <field name="name">Loan Documentation Reference</field>
+        <field name="code">loan.manager.documentation</field>
+        <field name="prefix">DOCL-</field>
+        <field name="padding">5</field>
+        <field name="company_id" eval="1"/>
+    </record>
+
+    <record id="seq_loan_repayment_reference" model="ir.sequence">
+        <field name="name">Loan Repayment Reference</field>
+        <field name="code">loan.manager.repayment</field>
+        <field name="prefix">PMT-</field>
+        <field name="padding">5</field>
+        <field name="company_id" eval="1"/>
+    </record>
+</odoo>

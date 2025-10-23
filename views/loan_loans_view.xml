@@ -59,7 +59,7 @@
         <field name="model">loan.manager.loan</field>
         <field name="arch" type="xml">
             <list string="Préstamos">
-                <field name="loan_reference" string="Referencia"/>
+                <field name="reference" string="Referencia"/>
                 <field name="partner_id" string="Cliente"/>
                 <field name="loan_type_id" string="Tipo de Prestamo"/>
                 <field name="create_date_only" string="Fecha" widget="date"/>
