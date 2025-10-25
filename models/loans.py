@@ -172,13 +172,13 @@ class Loan(models.Model):
             pending_total = 0.0
             for repayment in loan.loan_repayment_ids:
                 if repayment.status == 'paid':
-                    paid_total += (repayment.principal or 0.0) + (repayment.interest or 0.0)
+                    paid_total += (repayment.principal or 0.0)
                 elif repayment.status == 'partial':
                     paid_total += repayment.amount_paid or 0.0
                 elif repayment.status in ['pending', 'extra']:
-                    pending_total += (repayment.principal or 0.0) + (repayment.interest or 0.0)
-            loan.amount_paid = round(paid_total, 2)
-            loan.amount_pending = round(pending_total, 2)
+                    pending_total += (repayment.principal or 0.0)
+            loan.amount_paid = paid_total
+            loan.amount_pending = pending_total
 
     @api.depends('loan_type_id.amortization_method')
     def _compute_method_display(self):
@@ -559,6 +559,7 @@ class LoanRepayment(models.Model):
     """
     _name = 'loan.manager.repayment'
     _description = 'Loan Repayment'
+    _rec_name = 'reference'
 
     reference = fields.Char(string='Referencia', readonly=True, copy=False, default=lambda self: _('New'), tracking=True)
     loan_id = fields.Many2one('loan.manager.loan', string='Prestamo', required=True, ondelete='cascade')

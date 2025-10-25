@@ -28,4 +28,4 @@ class ResPartner(models.Model):
                     for rep in loan.loan_repayment_ids:
                         if rep.status in ['pending', 'extra']:
                             total += rep.principal
-            partner.loan_remaining_total = math.floor(total)
+            partner.loan_remaining_total = total
