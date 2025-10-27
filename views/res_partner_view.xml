@@ -1,0 +1,32 @@
+<odoo>
+  <record id="view_partner_form_inherit_loan_account" model="ir.ui.view">
+    <field name="name">res.partner.form.inherit.loan.account</field>
+    <field name="model">res.partner</field>
+    <field name="inherit_id" ref="base.view_partner_form"/>
+    <field name="arch" type="xml">
+      <xpath expr="//notebook" position="inside">
+        <page string="Préstamos">
+          <group>
+            <field name="loan_remaining_total" readonly="1"/>
+          </group>
+          <field name="loan_ids" nolabel="1">
+            <list create="0" edit="0" delete="0">
+              <field name="reference" string="Referencia"/>
+              <field name="create_date_only" string="Fecha" widget="date"/>
+              <field name="loan_amount" string="Monto"/>
+              <field name="disburse_amount" string="A Desembolsar"/>
+              <field name="tenure" string="Plazo"/>
+              <field name="interest_rate_display" string="Tasa"/>
+              <field name="amount_paid" readonly="1"/>
+              <field name="amount_pending" readonly="1"/>
+              <field name="loan_status" string="Estado" widget="badge"
+                     decoration-success="loan_status in ('approved','registered','disbursed')"
+                     decoration-warning="loan_status in ('draft','confirmed','pending')"
+                     decoration-danger="loan_status == 'declined'"/>
+            </list>
+          </field>
+        </page>
+      </xpath>
+    </field>
+  </record>
+</odoo>

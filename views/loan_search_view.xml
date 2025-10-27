@@ -1,0 +1,38 @@
+<odoo>
+  <record id="loan_manager_loan_search" model="ir.ui.view">
+    <field name="name">loan.manager.loan.search</field>
+    <field name="model">loan.manager.loan</field>
+    <field name="arch" type="xml">
+      <search string="Buscar Préstamos">
+        <filter name="tab_approved"
+                string="Aprobados"
+                domain="[('loan_status','in',('approved','registered','disbursed'))]"/>
+        <filter name="tab_pending"
+                string="Pendientes"
+                domain="[('loan_status','in',('draft','confirmed','pending'))]"/>
+        <filter name="tab_declined"
+                string="Denegados"
+                domain="[('loan_status','=','declined')]"/>
+
+        <separator/>
+
+        <field name="reference"/>
+        <field name="partner_id"/>
+        <field name="loan_type_id"/>
+
+        <filter name="grp_status" string="Agrupar por Estado" context="{'group_by':'loan_status'}"/>
+        <filter name="grp_partner" string="Agrupar por Cliente" context="{'group_by':'partner_id'}"/>
+      </search>
+    </field>
+  </record>
+
+  <record id="loans_action" model="ir.actions.act_window">
+    <field name="name">Prestamos</field>
+    <field name="res_model">loan.manager.loan</field>
+    <field name="view_mode">list,form,graph,pivot</field>
+    <field name="search_view_id" ref="loan_manager_loan_search"/>
+    <!-- <field name="context">{'search_default_tab_pending': 1}</field> -->
+    <!-- <field name="context">{'search_default_tab_approved': 1}</field> -->
+    <!-- <field name="context">{'search_default_tab_declined': 1}</field> -->
+  </record>
+</odoo>

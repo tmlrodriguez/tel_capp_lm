@@ -1,0 +1,46 @@
+<odoo>
+  <menuitem id="menu_loan_manager_root"
+            name="Prestamos"
+            web_icon="tel_capp_lm,static/description/icon.png"
+            sequence="1"/>
+
+
+  <!-- Dashboard -->
+  <menuitem id="menu_dashboard"
+            name="Inicio"
+            parent="menu_loan_manager_root"
+            action="loan_dashboard_action"
+            sequence="1"/>
+
+  <!-- Prestamos -->
+  <menuitem id="menu_loan_section"
+            name="Prestamos"
+            parent="menu_loan_manager_root"
+            action="loans_action"
+            sequence="2"/>
+
+    <!-- Reportes -->
+  <menuitem id="menu_reporting_section"
+            name="Reporteria"
+            parent="menu_loan_manager_root"
+            action="requirements_action"
+            sequence="3"/>
+
+  <!-- Configuración -->
+  <menuitem id="menu_configuration_section"
+            name="Configuración"
+            parent="menu_loan_manager_root"
+            sequence="4"/>
+
+  <menuitem id="menu_loan_requirements"
+            name="Requisitos para Prestamos"
+            parent="menu_configuration_section"
+            action="requirements_action"
+            sequence="1"/>
+
+  <menuitem id="menu_loan_types"
+            name="Tipos de Prestamos"
+            parent="menu_configuration_section"
+            action="types_action"
+            sequence="2"/>
+</odoo>

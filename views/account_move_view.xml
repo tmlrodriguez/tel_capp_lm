@@ -1,0 +1,24 @@
+<odoo>
+  <record id="view_move_form_inherit_loan_backlink" model="ir.ui.view">
+    <field name="name">account.move.form.inherit.loan.backlink</field>
+    <field name="model">account.move</field>
+    <field name="inherit_id" ref="account.view_move_form"/>
+    <field name="arch" type="xml">
+      <xpath expr="//div[@name='button_box']" position="inside">
+        <button name="action_open_loan_from_move"
+                type="object"
+                class="oe_stat_button"
+                icon="fa-external-link"
+                invisible="loan_manager_id == False">
+          <field name="loan_manager_id" invisible="1"/>
+          <div class="o_stat_info">
+            <span class="o_stat_value">Préstamo</span>
+            <span class="o_stat_text">
+              <field name="loan_manager_id" nolabel="1" readonly="1" options="{'no_open': True, 'no_create': True, 'no_create_edit': True}"/>
+            </span>
+          </div>
+        </button>
+      </xpath>
+    </field>
+  </record>
+</odoo>

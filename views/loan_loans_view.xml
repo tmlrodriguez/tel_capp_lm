@@ -1,0 +1,220 @@
+<odoo>
+
+    <record id="action_repayment_confirm_wizard" model="ir.actions.act_window">
+        <field name="name">Confirmar Pago</field>
+        <field name="res_model">loan.manager.repayment.confirm.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="context">{'active_id': active_id}</field>
+    </record>
+
+    <record id="view_repayment_confirm_wizard_form" model="ir.ui.view">
+        <field name="name">loan.repayment.confirm.wizard.form</field>
+        <field name="model">loan.manager.repayment.confirm.wizard</field>
+        <field name="arch" type="xml">
+          <form string="Confirmar Pago de Cuota">
+            <group>
+              <field name="repayment_id" invisible="1"/>
+              <field name="principal" readonly="1"/>
+              <field name="interest" readonly="1"/>
+              <field name="total_to_pay" readonly="1"/>
+                <field name="partial_amount"/>
+              <field name="payment_date"/>
+            </group>
+            <footer>
+              <button string="Cancelar" special="cancel" class="btn-secondary"/>
+              <button name="action_confirm" type="object" string="Confirmar Pago" class="btn-primary"/>
+            </footer>
+          </form>
+        </field>
+    </record>
+
+    <record id="loan_manager_action_reject_wizard" model="ir.actions.act_window">
+        <field name="name">Rechazar Préstamo</field>
+        <field name="res_model">loan.manager.reject.wizard</field>
+        <field name="view_mode">form</field>
+        <field name="target">new</field>
+        <field name="context">{'default_loan_id': active_id}</field>
+    </record>
+
+    <record id="loan_manager_view_reject_wizard_form" model="ir.ui.view">
+        <field name="name">loan.manager.reject.wizard.form</field>
+        <field name="model">loan.manager.reject.wizard</field>
+        <field name="arch" type="xml">
+          <form string="Motivo de Rechazo">
+            <group>
+              <field name="loan_id" readonly="1"/>
+              <field name="reason" placeholder="Escriba el motivo del rechazo..." required="1"/>
+            </group>
+            <footer>
+              <button string="Cancelar" class="btn-secondary" special="cancel"/>
+              <button name="action_confirm" type="object" string="Confirmar Rechazo" class="btn-danger"/>
+            </footer>
+          </form>
+        </field>
+    </record>
+
+    <record id="loan_list_view" model="ir.ui.view">
+        <field name="name">loan.manager.loan.tree</field>
+        <field name="model">loan.manager.loan</field>
+        <field name="arch" type="xml">
+            <list string="Préstamos">
+                <field name="reference" string="Referencia"/>
+                <field name="partner_id" string="Cliente"/>
+                <field name="loan_type_id" string="Tipo de Prestamo"/>
+                <field name="create_date_only" string="Fecha" widget="date"/>
+                <field name="interest_rate_display" string="Tasa"/>
+                <field name="loan_amount" string="Monto"/>
+                <field name="tenure" string="Plazo"/>
+                <field name="amount_paid" readonly="1"/>
+                <field name="amount_pending" readonly="1"/>
+                <field name="loan_status" string="Estado" widget="badge"
+                       decoration-success="loan_status == 'approved' or loan_status == 'disbursed'"
+                       decoration-danger="loan_status == 'declined'"
+                       decoration-info="loan_status == 'confirmed'"
+                       decoration-warning="loan_status == 'pending'"
+                       decoration-muted="loan_status == 'registered'"
+                       decoration-primary="loan_status == 'draft'"
+                />
+            </list>
+        </field>
+    </record>
+
+    <record id="loan_form_view" model="ir.ui.view">
+        <field name="name">loan.form</field>
+        <field name="model">loan.manager.loan</field>
+        <field name="arch" type="xml">
+            <form string="Solicitud de Préstamo">
+                <header>
+                    <button name="action_confirmed" type="object" string="Confirmar" class="btn-primary"
+                            invisible="loan_status != 'draft'"
+                            confirm="¿Desea confirmar el préstamo?"/>
+                    <button name="action_pending" type="object" string="Solicitar" class="btn-primary"
+                        invisible="loan_status != 'confirmed'"
+                        confirm="¿Desea solicitar el préstamo?"/>
+                    <button name="action_calculate_repayments" type="object" string="Calcular Pagos" class="btn-primary" invisible="loan_status in ('draft', 'approved', 'declined', 'registered', 'disbursed')"/>
+                    <button name="action_approved" type="object" string="Aprobar" class="btn-success"
+                            invisible="loan_status != 'pending'"
+                            confirm="¿Desea aprobar el préstamo?"/>
+                    <button name="%(loan_manager_action_reject_wizard)d" type="action" string="Rechazar" class="btn-danger"
+                            invisible="loan_status != 'pending'"
+                            confirm="¿Desea rechazar el préstamo?"/>
+                    <button name="action_registered" type="object" string="Registrar" class="btn-primary"
+                            invisible="loan_status != 'approved'"
+                            confirm="¿Desea registrar el préstamo?"/>
+                    <button name="action_disbursed" type="object" string="Desembolsar" class="btn-primary"
+                            invisible="loan_status != 'registered'"
+                            confirm="¿Desea desembolsar el préstamo?"/>
+                    <field name="loan_status" widget="statusbar" statusbar_visible="declined" invisible="loan_status != 'declined'"/>
+                    <field name="loan_status" widget="statusbar" statusbar_visible="draft,confirmed,pending,approved,registered,disbursed" invisible="loan_status == 'declined'"/>
+                </header>
+                <sheet>
+                <group col="2">
+                    <group>
+                        <field name="partner_id" domain="[('is_company','=', True)]" readonly="loan_status not in ('draft', 'confirmed', 'pending')"/>
+                        <field name="loan_type_id" readonly="loan_status not in ('draft', 'confirmed', 'pending')" domain="[('company_id', 'in', allowed_company_ids)]"/>
+                        <field name="loan_amount" readonly="loan_status not in ('draft', 'confirmed', 'pending')"/>
+                        <field name="tenure" readonly="loan_status not in ('draft', 'confirmed', 'pending')"/>
+                        <field name="interest_rate" readonly="loan_status not in ('draft', 'confirmed', 'pending')"/>
+                        <field name="disburse_amount" readonly="1" invisible="loan_status not in ('approved', 'registered', 'disbursed')"/>
+                    </group>
+                    <group>
+                        <field name="anticipated_payment_commission" readonly="loan_status in ('approved', 'registered', 'disbursed', 'declined') or not create_uid"/>
+                        <field name="disburse_commission" readonly="loan_status in ('approved', 'registered', 'disbursed', 'declined') or not create_uid"/>
+                        <field name="disburse_commission_amount" readonly="1"/>
+                        <field name="legal_expenses" readonly="loan_status in ('approved', 'registered', 'disbursed', 'declined') or not create_uid"/>
+                        <field name="life_insurance" readonly="loan_status in ('approved', 'registered', 'disbursed', 'declined') or not create_uid"/>
+                        <field name="tenure_plan" readonly="1"/>
+                        <field name="amortization_method" readonly="1"/>
+                    </group>
+                </group>
+                    <group invisible="loan_status != 'declined'">
+                        <field name="rejection_reason" readonly="1"/>
+                    </group>
+                    <group>
+                        <field name="documents_required" widget="many2many_tags" readonly="1"/>
+                    </group>
+                    <notebook>
+                        <page string="Documentos" invisible="loan_status == 'draft'">
+                            <field name="uploaded_documents" nolabel="1">
+                                <list editable="bottom" create="false" delete="false">
+                                    <field name="requirement_id" readonly="1"/>
+                                    <field name="filename" readonly="1"/>
+                                    <field name="status" readonly="1"/>
+                                    <field name="mandatory"/>
+                                    <field name="file" filename="filename" widget="binary"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Contabilidad" invisible="loan_status == 'draft'">
+                              <group col="2">
+                                    <group>
+                                      <field name="loan_account_number" readonly="1"/>
+                                      <field name="disburse_account_number" readonly="1"/>
+                                      <field name="disburse_bank_account_number" readonly="1"/>
+                                      <field name="interest_account_number" readonly="1"/>
+                                      <field name="life_insurance_account_number" readonly="1"/>
+                                      <field name="payment_account_number" readonly="1"/>
+                                      <field name="legal_expenses_account_number" readonly="1"/>
+                                      <field name="anticipated_payment_commission_account_number" readonly="1"/>
+                                      <field name="disburse_commission_account_number" readonly="1"/>
+                                    </group>
+                                    <group>
+                                      <field name="register_move_id" readonly="1" context="{'form_view_ref': 'account.view_move_form'}"/>
+                                      <field name="disburse_move_id" readonly="1" context="{'form_view_ref': 'account.view_move_form'}"/>
+                                    </group>
+                              </group>
+                        </page>
+                        <page string="Plan de Pagos" invisible="loan_status not in ('confirmed', 'pending', 'approved', 'registered')">
+                            <field name="loan_repayment_ids" nolabel="1" readonly="1">
+                                <list create="0" edit="0" delete="0">
+                                    <field name="sequence" string="Cuota" readonly="1"/>
+                                    <field name="due_date" string="Fecha de Pago" readonly="1"/>
+                                    <field name="principal" string="Capital" readonly="1"/>
+                                    <field name="interest" string="Interés" readonly="1"/>
+                                    <field name="total_payment" string="Pago Total" readonly="1"/>
+                                    <field name="remaining_balance" string="Saldo Restante" readonly="1"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Pagos" invisible="loan_status != 'disbursed'">
+                            <field name="loan_repayment_ids" nolabel="1" readonly="1">
+                                <list create="0" edit="0" delete="0">
+                                    <field name="sequence" string="Cuota" align="center" width="150px" readonly="1"/>
+                                    <field name="due_date" string="Fecha de Pago" align="center" width="120px" readonly="1"/>
+                                    <field name="principal" string="Capital" align="center" width="150px" readonly="1"/>
+                                    <field name="interest" string="Interés" align="center" width="150px" readonly="1"/>
+                                    <field name="total_payment" string="Pago Total" align="center" width="150px" readonly="1"/>
+                                    <field name="remaining_balance" string="Saldo Restante" align="center" width="150px" readonly="1"/>
+                                    <field name="status"
+                                           widget="badge"
+                                           align="center"
+                                           width="150px"
+                                           readonly="1"
+                                           decoration-danger="status == 'pending'"
+                                           decoration-success="status == 'paid'"
+                                           decoration-warning="status == 'partial'"
+                                           decoration-secondary="status == 'extra'"/>
+                                    <field name="move_id" widget="many2one"/>
+                                    <button name="%(action_repayment_confirm_wizard)d"
+                                            type="action"
+                                            string="Pagar"
+                                            class="btn-primary"
+                                            invisible="loan_status != 'disbursed' or status in ('paid', 'partial')"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <record id="loans_action" model="ir.actions.act_window">
+        <field name="name">Solicitudes de Prestamos</field>
+        <field name="res_model">loan.manager.loan</field>
+        <field name="view_mode">list,form</field>
+        <field name="domain">[('company_id', 'in', allowed_company_ids)]</field>
+    </record>
+</odoo>
