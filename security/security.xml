@@ -1,0 +1,20 @@
+<odoo>
+    <record id="module_category_loan_manager" model="ir.module.category">
+        <field name="name">Gestión de Préstamos</field>
+        <field name="description">Control de permisos sobre préstamos, pagos y documentación relacionada.</field>
+        <field name="sequence">11</field>
+        <field name="parent_id" eval="False"/>
+        <field name="visible" eval="True"/>
+    </record>
+
+    <record id="group_loan_manager_user" model="res.groups">
+        <field name="name">Usuario de Préstamos</field>
+        <field name="category_id" ref="tel_capp_lm.module_category_loan_manager"/>
+    </record>
+
+    <record id="group_loan_manager_admin" model="res.groups">
+        <field name="name">Administrador de Préstamos</field>
+        <field name="implied_ids" eval="[(4, ref('tel_capp_lm.group_loan_manager_user'))]"/>
+        <field name="category_id" ref="tel_capp_lm.module_category_loan_manager"/>
+    </record>
+</odoo>

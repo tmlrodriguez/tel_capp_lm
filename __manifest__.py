@@ -13,13 +13,13 @@
         # Data
         'data/ir_sequence_data.xml',
         # Security
+        'security/security.xml',
         'security/ir.model.access.csv',
         # Views
         'views/res_partner_view.xml',
         'views/loan_manager_requirements_view.xml',
         'views/loan_manager_types_view.xml',
         'views/loan_loans_view.xml',
-        'views/loan_search_view.xml',
         'views/loan_dashboard_view.xml',
         'views/account_move_view.xml',
         'views/loan_manager_menu.xml',
