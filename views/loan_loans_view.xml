@@ -1,5 +1,4 @@
 <odoo>
-
     <record id="action_repayment_confirm_wizard" model="ir.actions.act_window">
         <field name="name">Confirmar Pago</field>
         <field name="res_model">loan.manager.repayment.confirm.wizard</field>
@@ -51,6 +50,26 @@
               <button name="action_confirm" type="object" string="Confirmar Rechazo" class="btn-danger"/>
             </footer>
           </form>
+        </field>
+    </record>
+
+    <record id="view_loan_manager_loan_search" model="ir.ui.view">
+        <field name="name">loan.manager.loan.search</field>
+        <field name="model">loan.manager.loan</field>
+        <field name="arch" type="xml">
+          <search string="Buscar Préstamos">
+            <field name="partner_id" string="Cliente"/>
+            <field name="reference" string="Referencia"/>
+            <field name="loan_type_id" string="Tipo de Préstamo"/>
+            <field name="loan_status" string="Estado"/>
+            <filter name="f_approved" string="Aprobados" domain="[('loan_status','=','approved')]"/>
+            <filter name="f_pending" string="Pendientes" domain="[('loan_status','=','pending')]"/>
+            <filter name="f_disbursed" string="Desembolsados" domain="[('loan_status','=','disbursed')]"/>
+            <group expand="0" string="Agrupar por">
+              <filter name="g_partner" string="Cliente" context="{'group_by':'partner_id'}"/>
+              <filter name="g_status"  string="Estado"  context="{'group_by':'loan_status'}"/>
+            </group>
+          </search>
         </field>
     </record>
 
@@ -216,5 +235,11 @@
         <field name="res_model">loan.manager.loan</field>
         <field name="view_mode">list,form</field>
         <field name="domain">[('company_id', 'in', allowed_company_ids)]</field>
+        <field name="search_view_id" ref="view_loan_manager_loan_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Aquí puedes registrar todos los prestamos a realizar.
+            </p>
+        </field>
     </record>
 </odoo>
