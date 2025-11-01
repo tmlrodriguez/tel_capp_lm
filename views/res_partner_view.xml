@@ -5,7 +5,7 @@
     <field name="inherit_id" ref="base.view_partner_form"/>
     <field name="arch" type="xml">
       <xpath expr="//notebook" position="inside">
-        <page string="Préstamos">
+        <page string="Préstamos" groups="tel_capp_lm.group_loan_manager_user,tel_capp_lm.group_loan_manager_admin">
           <group>
             <field name="loan_remaining_total" readonly="1"/>
           </group>
